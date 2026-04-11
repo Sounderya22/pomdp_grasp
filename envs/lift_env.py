@@ -35,6 +35,8 @@ class NoisyLiftEnv:
         return noisy_xy, true_xy, info
 
     def step(self, action: torch.Tensor):
+        if not isinstance(action, torch.Tensor):
+            action = torch.tensor(action, dtype=torch.float32, device=self.device)
         obs, reward, terminated, truncated, info = self.env.step(action)
         true_xy = self._extract_xy(obs)
         noisy_xy = self._corrupt(true_xy)
