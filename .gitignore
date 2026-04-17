@@ -14,3 +14,17 @@ __pycache__/
 *.pyc
 results/
 logs/
+# Training outputs
+checkpoints/
+logs/
+results/
+*.pt
+*.pth
+*.ckpt
+
+# Large files
+*.sif
+*.tar.gz
+*.db
+*.db-shm
+*.db-wal

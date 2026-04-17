@@ -78,9 +78,10 @@ class POMCPAgent:
 
     def _build_solver(self):
         self._solver = pomdp_py.POUCT(
-            max_depth=5,
+            max_depth=6,           # was 5
             discount_factor=self.discount,
-            planning_time=self.planning_time,
-            exploration_const=5.0,
+            planning_time=1.0,     # was 0.5 — more time to explore
+            exploration_const=20.0, # was 5.0 — force more exploration
             rollout_policy=self.policy_model,
+            num_visits_init=1,
         )

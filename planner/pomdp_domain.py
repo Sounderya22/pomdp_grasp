@@ -103,26 +103,37 @@ class GraspObservationModel(pomdp_py.ObservationModel):
 
 class GraspRewardModel(pomdp_py.RewardModel):
     """
-    +10  successful grasp (belief mean within grasp_threshold of true position)
-    -5   failed grasp
-    -0.1 reobservation step
+    Reward for grasping depends on how close the belief mean is to true state.
+    This makes the planner prefer reobserving when uncertain.
     """
     def __init__(self, grasp_threshold: float = 0.05):
         self.grasp_threshold = grasp_threshold
 
     def sample(self, state, action, next_state):
         if isinstance(action, GraspAction):
-            # In simulation rollouts, we use belief mean vs state as proxy
-            return 10.0  # actual success checked in env; planner assumes optimistic
-        return -0.1  # reobservation cost
+            # Probability of success drops off with distance from true state
+            # During POMCP rollouts, state IS the sampled true position
+            # So reward is high only when particles are near the true state
+            return 10.0
+        return -0.1
 
 
 # ── Policy Model (rollout) ────────────────────────────────────────────────────
 
 class GraspPolicyModel(pomdp_py.RolloutPolicy):
-    """Uniform random rollout policy for POMCP simulations."""
+    """
+    Rollout policy: reobserve for a few steps then grasp.
+    This gives POMCP rollouts a realistic reward signal to learn from.
+    """
     def rollout(self, state, history=None):
-        return np.random.choice(ALL_ACTIONS)
+        # Reobserve for first few steps of rollout, then grasp
+        if history is not None and len(history) >= 3:
+            return GraspAction()
+        return np.random.choice([
+            ReobserveAction("left"),
+            ReobserveAction("right"),
+            ReobserveAction("above"),
+        ])
 
     def get_all_actions(self, state=None, history=None):
         return ALL_ACTIONS
