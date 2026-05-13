@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=lift_ppo_resume
+#SBATCH --job-name=lift_ppo_custom
 #SBATCH --qos=high
-#SBATCH --output=/fs/nexus-scratch/vvs22/pomdp_grasp/logs/lift_ppo_resume_%j.log
-#SBATCH --gres=gpu:rtxa5000:1
+#SBATCH --output=/fs/nexus-scratch/vvs22/pomdp_grasp/logs/lift_ppo_custom_%j.log
+#SBATCH --gres=gpu:rtxa4000:1
 #SBATCH --time=23:59:59
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
@@ -25,7 +25,4 @@ apptainer exec --nv --pwd /workspace/isaaclab \
   --task Custom-Isaac-Lift-Cube-Franka-v0 \
   --num_envs 1024 \
   --headless \
-  --max_iterations 6000 \
-  --resume \
-  --load_run 2026-04-27_20-38-30 \
-  --checkpoint model_14999.pt
+  --max_iterations 15000

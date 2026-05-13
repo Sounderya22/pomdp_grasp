@@ -20,7 +20,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 from isaaclab.envs import ManagerBasedRLEnv
 from rsl_rl.modules import ActorCritic
 
-NOISE_LEVELS = [0.00, 0.01, 0.02, 0.05, 0.08, 0.10]
+NOISE_LEVELS = [0.00, 0.01, 0.02, 0.03, 0.04,0.05, 0.06, 0.07, 0.08, 0.09, 0.10]
 OBJ_XYZ      = slice(18, 21)
 LIFT_Z       = 0.15
 MAX_STEPS    = 500
@@ -34,9 +34,12 @@ act_dim = env.action_space.shape[-1]
 print(f"\n[INFO] Loading checkpoint: {args_cli.checkpoint}")
 ckpt = torch.load(args_cli.checkpoint, map_location="cuda:0")
 
+mock_obs = {"policy": torch.zeros(1, obs_dim)}
+obs_groups = {"policy": ["policy"], "critic": ["policy"]}
+
 actor_critic = ActorCritic(
-    num_actor_obs=obs_dim,
-    num_critic_obs=obs_dim,
+    obs=mock_obs,
+    obs_groups=obs_groups,
     num_actions=act_dim,
     actor_hidden_dims=[256, 128, 64],
     critic_hidden_dims=[256, 128, 64],
@@ -54,7 +57,7 @@ def run_episode(noise_std):
         if noise_std > 0:
             noisy_obs[0, OBJ_XYZ] += torch.randn(3, device="cuda:0") * noise_std
         with torch.no_grad():
-            action = actor_critic.act_inference(noisy_obs)
+            action = actor_critic.act_inference({"policy": noisy_obs})
         obs, _, terminated, truncated, _ = env.step(action)
         if obs["policy"][0, 20].item() > LIFT_Z:
             return 1
