@@ -90,6 +90,13 @@ apptainer exec --bind /fs/nexus-scratch/vvs22 /fs/nexus-scratch/vvs22/isaaclab.s
 ```
 *Plots are saved to the `plots/` directory.*
 
+## Future Work & Unused Components
+The original project scope involved fully integrating a POMCP online planner with the Isaac Lab environment. While the project pivoted to a rigorous sensitivity analysis of PPO policies, the foundational code for the POMCP planner remains in the repository for future work:
+- `planner/pomdp_domain.py`: Contains the `pomdp_py` definitions for the POMDP State, Action, Observation, Transition Model, and Reward Model.
+- `planner/pomcp_agent.py`: A wrapper for the POMCP solver that utilizes the particle filter (`belief/particle_filter.py`) for belief tracking.
+
+Future work will focus on reconciling the sequential CPU-based tree search of `pomdp_py` with the highly vectorized, GPU-accelerated environment loop of Isaac Lab to deploy the closed-loop POMCP agent.
+
 ## Key Results
 - **Nominal Policy:** Degrades gracefully from 100% success at 0cm noise to 84% at 10cm noise.
 - **Greedy Baseline:** Fails catastrophically under noise, missing the grasp entirely in 62% of episodes at just 5cm noise.
