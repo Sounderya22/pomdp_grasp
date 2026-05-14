@@ -1,117 +1,97 @@
-# pomdp_grasp
+# Sensitivity of Reinforcement Learning Policies to Observation Noise
 
-Belief-space planning for robot grasping under pose uncertainty.
+A final project for the University of Maryland evaluating the robustness of a Franka robot lifting policy under observation noise, characterizing the performance gap between MDP training and POMDP deployment.
 
-<!-- A course project for **ENAE 788Z: Decision Making under Uncertainty** at the University of Maryland. -->
+## Overview
 
-## Problem
+Reinforcement learning policies for robotic manipulation are typically trained under the assumption of perfect state observation. In deployment, depth cameras introduce noise into object pose estimates, transforming the problem into a Partially Observable Markov Decision Process (POMDP). 
 
-Depth cameras introduce noise in estimating object position on a table. A robot acting greedily on a noisy estimate fails when the error is large, but taking extra observations costs time. This project formalizes the decision — **grasp now or reobserve first?** — as a POMDP and solves it with POMCP.
+This project investigates how severely this transition degrades policy performance in a concrete manipulation task: lifting a cube using a Franka Panda arm simulated in Isaac Lab. We characterize the sensitivity of an MDP-trained policy to Gaussian noise and evaluate domain randomization (noise augmentation) strategies.
 
-Simulation is done in [Isaac Lab](https://github.com/isaac-sim/IsaacLab) using the `Isaac-Lift-Cube-Franka-v0` environment.
+### Key Contributions
+- **Nominal Policy Training:** Modified reward shaping to successfully train a PPO baseline under perfect observability.
+- **Sensitivity Analysis:** Automated evaluation pipeline to sweep observation noise ($\sigma \in [0, 10]$ cm) and quantify the exact degradation curve.
+- **Physical Limits of Domain Randomization:** Demonstrated that unbounded noise training (10cm) causes catastrophic forgetting, while fine-tuning with physically bounded noise (3cm max, restricted by the gripper aperture) successfully transfers performance while adding robustness.
+- **Particle Filter Denoising:** Implemented and validated a belief-space particle filter capable of collapsing 7cm of positional error down to 0.5cm in just 10 sequential observations.
 
-## Approach
-
-| Method | Description |
-|---|---|
-| **Greedy baseline** | Single observation at episode start, immediate grasp at noisy estimate |
-| **POMCP + particle filter** | Maintains belief over cube (x, y), plans over future observations before committing to grasp |
-
-Evaluated across three noise levels (σ = 0.01, 0.05, 0.10 m) over 100 episodes each.
-
-## Repo Structure
+## Repository Structure
 
 ```
 pomdp_grasp/
-├── envs/
-│   ├── lift_env.py          # NoisyLiftEnv: wraps Isaac Lab, injects Gaussian noise
-│   └── noise_models.py      # Noise model utilities
-├── belief/
-│   └── particle_filter.py   # Particle filter: init, reweight, resample, entropy
-├── planner/
-│   ├── pomdp_domain.py      # pomdp_py domain definitions (State, Action, Models)
-│   └── pomcp_agent.py       # POMCP solver wrapper
-├── baselines/
-│   └── greedy.py            # Greedy agent: no belief, immediate grasp
+├── configs/                 # Isaac Lab environment configs (e.g. reward weights)
+├── envs/                    # NoisyLiftEnv wrapper for injecting Gaussian noise
 ├── experiments/
-│   ├── run_greedy.py        # Evaluate greedy baseline
-│   ├── run_pomcp.py         # Evaluate POMCP agent
-│   └── configs/             # Noise level configs (low/med/high)
-├── eval/
-│   ├── metrics.py           # Success rate, reobservation count, plotting
-│   └── logger.py            # Episode logger
-├── tests/
-│   ├── test_noise_model.py  # Validates noise wrapper mean/variance
-│   ├── test_particle_filter.py
-│   └── test_greedy.py
-└── results/                 # Auto-generated outputs (gitignored)
+│   ├── eval_noise.py        # Sweeps noise levels for the nominal policy
+│   ├── eval_noisy_policy.py # Sweeps noise levels for the fine-tuned noisy policy
+│   ├── run_greedy.py        # Evaluates the deterministic kinematic baseline
+│   ├── run_pf.py            # Validates particle filter convergence
+│   └── generate_plots.py    # Generates PNGs for the paper
+├── scripts/                 # SLURM submission scripts for the UMD Nexus cluster
+│   ├── train_lift.sh        # Trains nominal PPO policy
+│   ├── train_noisy.sh       # Fine-tunes the 3cm bounded noisy policy
+│   ├── eval_*.sh            # Scripts for running evaluations in headless mode
+├── belief/
+│   └── particle_filter.py   # Explicit belief maintenance 
+├── baselines/
+│   └── greedy.py            # Greedy open-loop kinematic agent
+├── results/                 # JSON outputs from evaluation runs
+└── plots/                   # Generated PNG plots (Sensitivity, PF convergence)
 ```
 
-## Prerequisites
+## Setup & Prerequisites
 
-- [Isaac Lab](https://github.com/isaac-sim/IsaacLab) installed locally with the `env_isaaclab` conda environment
-- Isaac Sim 5.1
-- NVIDIA GPU (tested on RTX 4070 Laptop)
+This project was developed on the UMD UMIACS Nexus cluster using an Apptainer container for Isaac Lab.
 
+1. **Isaac Lab Container:** Ensure you have the `isaaclab.sif` image mounted.
+2. **Dependencies:** `numpy` and `matplotlib` (installed locally).
+
+**Important:** Before running Apptainer scripts, ensure conflicting host environments are disabled:
 ```bash
-pip install pomdp-py numpy scipy matplotlib pyyaml
+unset CONDA_PREFIX
+unset CONDA_DEFAULT_ENV
+unset PYTHONHOME
+unset PYTHONPATH
 ```
 
-## Getting Started
+## Running the Code
 
-All scripts must be launched through Isaac Lab's Python wrapper so Isaac Sim modules load correctly.
+All compute-intensive scripts are designed to be run via SLURM (`sbatch`).
 
+### 1. Training Policies
+To train the nominal baseline policy from scratch (takes ~1-2 hours on an RTX A6000):
 ```bash
-cd ~/dev/IsaacLab
+cd scripts
+sbatch train_lift.sh
 ```
 
-**1. Verify the environment runs:**
+To fine-tune the noise-augmented policy (3cm bound) from a nominal checkpoint:
 ```bash
-./isaaclab.sh -p scripts/environments/random_agent.py \
-  --task Isaac-Lift-Cube-Franka-v0 --num_envs 1
+sbatch train_noisy.sh
 ```
 
-**2. Run the noise model test:**
+### 2. Running Evaluations
+To generate the sensitivity curves (evaluating both policies from $\sigma=0$ to $0.10$ m):
 ```bash
-./isaaclab.sh -p ~/dev/pomdp_grasp/tests/test_noise_model.py --headless
+sbatch eval_noise.sh         # Evaluates nominal policy
+sbatch eval_noisy_policy.sh  # Evaluates fine-tuned policy
 ```
+*Results are saved as JSON files in the `results/` directory.*
 
-**3. Run the greedy baseline:**
+### 3. Running the Greedy Baseline
+To execute the deterministic open-loop baseline and measure position error:
 ```bash
-./isaaclab.sh -p ~/dev/pomdp_grasp/experiments/run_greedy.py --headless
+sbatch eval_greedy.sh
 ```
 
-**4. Run the POMCP agent:**
+### 4. Generating Plots
+Once the evaluation JSONs are generated, create the `.png` plots used in the paper:
 ```bash
-./isaaclab.sh -p ~/dev/pomdp_grasp/experiments/run_pomcp.py --headless
+apptainer exec --bind /fs/nexus-scratch/vvs22 /fs/nexus-scratch/vvs22/isaaclab.sif /workspace/isaaclab/isaaclab.sh -p experiments/generate_plots.py
 ```
+*Plots are saved to the `plots/` directory.*
 
-## Key Design Decisions
-
-**Observation indices confirmed from env inspection:**
-```
-obs["policy"][0, 18:20]  →  cube (x, y) position  ← noise injected here
-obs["policy"][0, 20]     →  cube z position
-obs["policy"][0, 0:9]    →  joint positions
-obs["policy"][0, 9:17]   →  joint velocities
-```
-
-**NoisyLiftEnv returns both `noisy_xy` and `true_xy`** on every step so the particle filter can be evaluated against ground truth without a separate oracle call.
-
-**The particle filter is decoupled from Isaac Lab** — it operates purely on (x, y) floats and has no Isaac Lab dependency, making it independently unit-testable.
-
-## Results
-
-*To be populated after experiments.*
-
-| Method | σ=0.01 | σ=0.05 | σ=0.10 |
-|---|---|---|---|
-| Greedy baseline | - | - | - |
-| POMCP + particle filter | - | - | - |
-
-## References
-
-- [POMCP — Silver & Veness, 2010](https://papers.nips.cc/paper/2010/hash/edfbe1afcf9246bb0d40eb4d8027d90f-Abstract.html)
-- [pomdp_py library](https://h2r.github.io/pomdp-py/)
-- [Isaac Lab](https://isaac-sim.github.io/IsaacLab/)
-<!-- - Algorithms for Decision Making — Kochenderfer, Wheeler, Wray (course textbook) -->
+## Key Results
+- **Nominal Policy:** Degrades gracefully from 100% success at 0cm noise to 84% at 10cm noise.
+- **Greedy Baseline:** Fails catastrophically under noise, missing the grasp entirely in 62% of episodes at just 5cm noise.
+- **3cm Fine-Tuned Policy:** Retains 97% success within its 3cm target domain, but domain specialization causes it to degrade faster than the baseline under extreme out-of-distribution noise (dropping to 64% at 10cm). 
+- **Particle Filter:** Reduces belief entropy and collapses positional uncertainty by a factor of 15 (7.2cm $\rightarrow$ 0.47cm) within 10 observations (200ms penalty).
